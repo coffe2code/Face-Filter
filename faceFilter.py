@@ -42,6 +42,13 @@ def lip_size(lip):
 	lipCenter = np.mean(lip[hull.vertices,:],axis=0)
 	lipCenter = lipCenter.astype(int)
 	return int(lipWidth),lipCenter
+
+def face_size(face):
+	faceWidth = dst.euclidean(face[0],face[16])
+	hull = ConvexHull(face)
+	faceCenter = np.mean(face[hull.vertices,:],axis=0)
+	faceCenter = faceCenter.astype(int)
+	return int(faceWidth),faceCenter	
 ##################Funtion to calculate lip sizes####
 
 #################Function to place the overlay on to the face image###########
@@ -126,6 +133,51 @@ def place_eye(frame,eyeCenter,eyeSize):
 	dst = cv2.add(roi_bg,roi_fg)
 
 	frame[y1:y2,x1:x2] = dst
+
+def place_face(frame,faceCenter,faceSize):
+	#print eyeSize
+	faceSize = int(faceSize * 1.5)
+	x1 = int(faceCenter[0,0] - (faceSize/2.9))
+	x2 = int(faceCenter[0,0] + (faceSize/3.0))
+	y1 = int(faceCenter[0,1] - (faceSize/1.6))
+	y2 = int(faceCenter[0,1] + (faceSize/3.6))
+
+	h, w = frame.shape[:2]
+
+	#check for clipping
+	if x1 < 0:
+		x1=0
+	if y1 < 0:
+		y1=0
+	if x2 >w:
+		x2=w
+	if y2 > h:
+		y2=h
+
+
+	#print x1,y1
+	#print x2,y2
+	#re-calculate the size to avoid clipping
+	faceOverlayWidth = x2 - x1
+	faceOverlayHeight = y2 - y1
+
+	#calculate the masks for the overlay
+	faceOverlay = cv2.resize(imgFace,(faceOverlayWidth,faceOverlayHeight),interpolation = cv2.INTER_AREA)
+	mask = cv2.resize(orig_mask_face,(faceOverlayWidth,faceOverlayHeight),interpolation=cv2.INTER_AREA)
+	mask_inv = cv2.resize(orig_mask_inv_face,(faceOverlayWidth,faceOverlayHeight),interpolation=cv2.INTER_AREA)
+	
+	#take ROI for the overlay from background, equal to size of the overlay image
+	roi = frame[y1:y2,x1:x2]
+
+	roi_bg = cv2.bitwise_and(roi,roi,mask=mask_inv)
+	
+	roi_fg = cv2.bitwise_and(faceOverlay,faceOverlay,mask=mask)
+	
+	dst = cv2.add(roi_bg,roi_fg)
+
+	frame[y1:y2,x1:x2] = dst
+
+
 ##################Load and pre-process filter###########
 
 imgEye = cv2.imread("eye.png",-1)
@@ -149,6 +201,11 @@ imgLip = imgLip[:,:,0:3]
 
 lipHeight, lipWidth = imgLip.shape[:2]
 
+imgFace = cv2.imread("face.png",-1)
+orig_mask_face = imgFace[:,:,3]
+orig_mask_inv_face=cv2.bitwise_not(orig_mask_face)
+imgFace = imgFace[:,:,0:3]
+faceHeight, faceWidth = imgFace.shape[:2]
 ##################Start capturing the WebCam#########
 video_capture = cv2.VideoCapture(0)
 
@@ -175,17 +232,23 @@ while True:
 
 			lip = landmarks[MOUTH_OUTLINE_POINTS]
 
+			face = landmarks[JAWLINE_POINTS]
+
 			lipSize, lipCenter = lip_size(lip)
 
 			leftEyeSize, leftEyeCenter = eye_size(left_eye)
 			rightEyeSize, rightEyeCenter = eye_size(right_eye)
 
-			#print "Left - Eye Coordinates"
-			place_eye(frame,leftEyeCenter,leftEyeSize)
-			#print "Right - Eye Coordinates"
-			place_eye(frame,rightEyeCenter,rightEyeSize)
+			faceSize, faceCenter = face_size(face)
 
-			place_lip(frame,lipCenter,lipSize)
+			#print "Left - Eye Coordinates"
+			#place_eye(frame,leftEyeCenter,leftEyeSize)
+			#print "Right - Eye Coordinates"
+			#place_eye(frame,rightEyeCenter,rightEyeSize)
+
+			#place_lip(frame,lipCenter,lipSize)
+
+			place_face(frame,faceCenter,faceSize)
 
 		cv2.imshow("Faces with Overlay",frame)
 
